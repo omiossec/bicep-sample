@@ -16,5 +16,6 @@ Samples work with the current version of Bicep (no in Alpha)
 
 You may also notice the Github Actions workflow. I wanted to see how you can build a CI/CD worklow with Bicep
 
+Note: Bicep is not ready for production 
 
 If you want more information about [me](https://github.com/omiossec)
