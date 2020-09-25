@@ -3,10 +3,11 @@ This Bicep file create two VM, a VNET with two subnet and an Application Gateway
 
 */
 
-// default param
+// default param and default variable
 param defaultLocation string {
     default: 'northeurope'
 }
+var subscriptionID = subscription().id
 
 // network related section
 var networkConfig = {
@@ -55,6 +56,7 @@ param appGatewayName string {
       }
 }
 var appGatewayPublicIp = '${appGatewayName}-pip'
+
 
 param websiteHostName string {
     metadata: {
@@ -144,10 +146,10 @@ resource appGateway 'Microsoft.Network/applicationGateways@2020-05-01' = {
             name: 'http-listener'
             properties: {
                 frontendIPConfiguration: {
-                    id: 'Microsoft.Network/applicationGateways/${appGatewayName}/frontendIPConfigurations/appGwPublicFrontendIp'
+                    id: '${subscriptionID}/Microsoft.Network/applicationGateways/${appGatewayName}/frontendIPConfigurations/appGwPublicFrontendIp'
                 }
                 frontendPort: {
-                    id: 'Microsoft.Network/applicationGateways/${appGatewayName}/frontendPorts/http-80'
+                    id: '${subscriptionID}/Microsoft.Network/applicationGateways/${appGatewayName}/frontendPorts/http-80'
                 }
                 protocol: 'Http' 
                 hostName: websiteHostName
@@ -163,13 +165,13 @@ resource appGateway 'Microsoft.Network/applicationGateways@2020-05-01' = {
             properties: {
                 ruleType: 'Basic'
                 httpListener: {
-                    id: 'Microsoft.Network/applicationGateways/${appGatewayName}/httpListeners/http-listener'
+                    id: '${subscriptionID}/Microsoft.Network/applicationGateways/${appGatewayName}/httpListeners/http-listener'
                 }
                 backendAddressPool: {
-                    id: 'Microsoft.Network/applicationGateways/${appGatewayName}/backendAddressPools/backend-pool'
+                    id: '${subscriptionID}/Microsoft.Network/applicationGateways/${appGatewayName}/backendAddressPools/backend-pool'
                 }
                 backendHttpSettings: {
-                    id: 'Microsoft.Network/applicationGateways/${appGatewayName}/backendHttpSettingsCollection/backend-http-settings'
+                    id: '${subscriptionID}/Microsoft.Network/applicationGateways/${appGatewayName}/backendHttpSettingsCollection/backend-http-settings'
                 }
             }
         }
@@ -230,7 +232,7 @@ resource vmNic01 'Microsoft.Network/networkInterfaces@2017-06-01' = {
             }
             privateIPAllocationMethod: 'Dynamic'
             applicationGatewayBackendAddressPools: {
-                id: 'Microsoft.Network/applicationGateways/${appGateway}/backendAddressPools/backend-pool'
+                id: '${subscriptionID}/Microsoft.Network/applicationGateways/${appGateway}/backendAddressPools/backend-pool'
             }
           }
         }
@@ -299,7 +301,7 @@ resource vmNic01 'Microsoft.Network/networkInterfaces@2017-06-01' = {
             }
             privateIPAllocationMethod: 'Dynamic'
             applicationGatewayBackendAddressPools: {
-                id: 'Microsoft.Network/applicationGateways/${appGateway}/backendAddressPools/backend-pool'
+                id: '${subscriptionID}/Microsoft.Network/applicationGateways/${appGateway}/backendAddressPools/backend-pool'
             }
           }
         }
