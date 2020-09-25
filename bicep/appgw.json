@@ -1,0 +1,407 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "defaultLocation": {
+      "type": "string",
+      "defaultValue": "northeurope"
+    },
+    "appGatewayName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the App gateway"
+      }
+    },
+    "websiteHostName": {
+      "type": "string",
+      "metadata": {
+        "description": "host name for the protected web site"
+      }
+    },
+    "vmNamePrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "Prefix used to create VM name"
+      }
+    },
+    "vmSku": {
+      "type": "string",
+      "allowedValues": [
+        "Standard_F2s",
+        "Standard_B2ms"
+      ]
+    },
+    "vmOS": {
+      "type": "string",
+      "defaultValue": "2019-Datacenter",
+      "allowedValues": [
+        "2016-Datacenter",
+        "2016-Datacenter-Server-Core",
+        "2016-Datacenter-Server-Core-smalldisk",
+        "2019-Datacenter",
+        "2019-Datacenter-Server-Core",
+        "2019-Datacenter-Server-Core-smalldisk"
+      ]
+    },
+    "localAdminPassword": {
+      "type": "secureString",
+      "metadata": {
+        "description": "password for the windows VM"
+      }
+    }
+  },
+  "functions": [],
+  "variables": {
+    "networkConfig": {
+      "name": "demo-vnet",
+      "prefix": "10.0.0.0/21",
+      "subnets": [
+        {
+          "name": "backend",
+          "ip": "10.0.0.0/24"
+        },
+        {
+          "name": "front",
+          "ip": "10.0.1.0/24"
+        }
+      ]
+    },
+    "appGatewayPublicIp": "[format('{0}-pip', parameters('appGatewayName'))]",
+    "subscriptionID": "[subscription().id]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2020-05-01",
+      "name": "[variables('networkConfig').name]",
+      "location": "[parameters('defaultLocation')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('networkConfig').prefix]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('networkConfig').subnets[0].name]",
+            "properties": {
+              "addressPrefix": "[variables('networkConfig').subnets[0].ip]"
+            }
+          },
+          {
+            "name": "[variables('networkConfig').subnets[1].name]",
+            "properties": {
+              "addressPrefix": "[variables('networkConfig').subnets[1].ip]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2020-05-01",
+      "name": "[variables('appGatewayPublicIp')]",
+      "location": "[parameters('defaultLocation')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAddressVersion": "IPv4",
+        "publicIPAllocationMethod": "Static",
+        "idleTimeoutInMinutes": 4
+      }
+    },
+    {
+      "type": "Microsoft.Network/applicationGateways",
+      "apiVersion": "2020-05-01",
+      "name": "[parameters('appGatewayName')]",
+      "location": "[parameters('defaultLocation')]",
+      "properties": {
+        "sku": {
+          "name": "Standard_v2",
+          "tier": "Standard_v2"
+        },
+        "gatewayIPConfigurations": [
+          {
+            "name": "appGatewayIpConfig",
+            "properties": {
+              "subnet": {
+                "id": "[format('{0}/subnets/{1}', resourceId('Microsoft.Network/virtualNetworks', variables('networkConfig').name), variables('networkConfig').subnets[0].name)]"
+              }
+            }
+          }
+        ],
+        "sslCertificates": [],
+        "trustedRootCertificates": [],
+        "frontendIPConfigurations": [
+          {
+            "name": "appGwPublicFrontendIp",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGatewayPublicIp'))]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "http-80",
+            "properties": {
+              "port": 80
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "backend-pool",
+            "properties": {
+              "backendAddresses": []
+            }
+          }
+        ],
+        "backendHttpSettingsCollection": [
+          {
+            "name": "backend-http-settings",
+            "properties": {
+              "port": 80,
+              "protocol": "http",
+              "cookieBasedAffinity": "enabled",
+              "connectionDraining": {
+                "enabled": true,
+                "drainTimeoutInSec": 60
+              },
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "appcookie",
+              "requestTimeout": 30
+            }
+          }
+        ],
+        "httpListeners": [
+          {
+            "name": "http-listener",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[format('{0}/Microsoft.Network/applicationGateways/{1}/frontendIPConfigurations/appGwPublicFrontendIp', variables('subscriptionID'), parameters('appGatewayName'))]"
+              },
+              "frontendPort": {
+                "id": "[format('Microsoft.Network/applicationGateways/{0}/frontendPorts/http-80', parameters('appGatewayName'))]"
+              },
+              "protocol": "Http",
+              "hostName": "[parameters('websiteHostName')]",
+              "hostNames": [],
+              "requireServerNameIndication": false
+            }
+          }
+        ],
+        "urlPathMaps": [],
+        "requestRoutingRules": [
+          {
+            "name": "http01-rule",
+            "properties": {
+              "ruleType": "Basic",
+              "httpListener": {
+                "id": "[format('Microsoft.Network/applicationGateways/{0}/httpListeners/http-listener', parameters('appGatewayName'))]"
+              },
+              "backendAddressPool": {
+                "id": "[format('Microsoft.Network/applicationGateways/{0}/backendAddressPools/backend-pool', parameters('appGatewayName'))]"
+              },
+              "backendHttpSettings": {
+                "id": "[format('Microsoft.Network/applicationGateways/{0}/backendHttpSettingsCollection/backend-http-settings', parameters('appGatewayName'))]"
+              }
+            }
+          }
+        ],
+        "probes": [],
+        "rewriteRuleSets": [],
+        "redirectConfigurations": [],
+        "privateLinkConfigurations": [],
+        "enableHttp2": false,
+        "autoscaleConfiguration": {
+          "minCapacity": 2,
+          "maxCapacity": 15
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGatewayPublicIp'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('networkConfig').name)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2017-06-01",
+      "name": "[format('{0}-01-nic', parameters('vmNamePrefix'))]",
+      "location": "[parameters('defaultLocation')]",
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": {
+                "id": "[format('{0}/subnets/backend', resourceId('Microsoft.Network/virtualNetworks', variables('networkConfig').name))]"
+              },
+              "privateIPAllocationMethod": "Dynamic",
+              "applicationGatewayBackendAddressPools": {
+                "id": "[format('Microsoft.Network/applicationGateways/{0}/backendAddressPools/backend-pool', reference(resourceId('Microsoft.Network/applicationGateways', parameters('appGatewayName')), '2020-05-01', 'full'))]"
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/applicationGateways', parameters('appGatewayName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('networkConfig').name)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2019-07-01",
+      "name": "[format('{0}-01-vm', parameters('vmNamePrefix'))]",
+      "location": "[parameters('defaultLocation')]",
+      "properties": {
+        "osProfile": {
+          "computerName": "[format('{0}-01', parameters('vmNamePrefix'))]",
+          "adminUsername": "localadm",
+          "adminPassword": "[parameters('localAdminPassword')]",
+          "windowsConfiguration": {
+            "provisionVmAgent": true
+          }
+        },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSku')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "[parameters('vmOS')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "name": "[format('{0}-01-os-vhd', parameters('vmNamePrefix'))]",
+            "caching": "ReadWrite",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            },
+            "diskSizeGB": 127
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "properties": {
+                "primary": true
+              },
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-01-nic', parameters('vmNamePrefix')))]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-01-nic', parameters('vmNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2017-06-01",
+      "name": "[format('{0}-02-nic', parameters('vmNamePrefix'))]",
+      "location": "[parameters('defaultLocation')]",
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": {
+                "id": "[format('{0}/subnets/backend', resourceId('Microsoft.Network/virtualNetworks', variables('networkConfig').name))]"
+              },
+              "privateIPAllocationMethod": "Dynamic",
+              "applicationGatewayBackendAddressPools": {
+                "id": "[format('Microsoft.Network/applicationGateways/{0}/backendAddressPools/backend-pool', reference(resourceId('Microsoft.Network/applicationGateways', parameters('appGatewayName')), '2020-05-01', 'full'))]"
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/applicationGateways', parameters('appGatewayName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('networkConfig').name)]"
+      ]
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2019-07-01",
+      "name": "[format('{0}-02-vm', parameters('vmNamePrefix'))]",
+      "location": "[parameters('defaultLocation')]",
+      "properties": {
+        "osProfile": {
+          "computerName": "[format('{0}-02', parameters('vmNamePrefix'))]",
+          "adminUsername": "localadm",
+          "adminPassword": "[parameters('localAdminPassword')]",
+          "windowsConfiguration": {
+            "provisionVmAgent": true
+          }
+        },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSku')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "[parameters('vmOS')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "name": "[format('{0}-02-os-vhd', parameters('vmNamePrefix'))]",
+            "caching": "ReadWrite",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            },
+            "diskSizeGB": 127
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "properties": {
+                "primary": true
+              },
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-02-nic', parameters('vmNamePrefix')))]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-02-nic', parameters('vmNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Compute/availabilitySets",
+      "apiVersion": "2019-07-01",
+      "name": "[format('{0}-avset', parameters('vmNamePrefix'))]",
+      "location": "[parameters('defaultLocation')]",
+      "sku": {
+        "name": "Aligned"
+      },
+      "properties": {
+        "platformUpdateDomainCount": 5,
+        "platformFaultDomainCount": 3,
+        "virtualMachines": [
+          {
+            "id": "[resourceId('Microsoft.Compute/virtualMachines', format('{0}-02-vm', parameters('vmNamePrefix')))]"
+          },
+          {
+            "id": "[resourceId('Microsoft.Compute/virtualMachines', format('{0}-01-vm', parameters('vmNamePrefix')))]"
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines', format('{0}-01-vm', parameters('vmNamePrefix')))]",
+        "[resourceId('Microsoft.Compute/virtualMachines', format('{0}-02-vm', parameters('vmNamePrefix')))]"
+      ]
+    }
+  ],
+  "outputs": {}
+}

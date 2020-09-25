@@ -10,6 +10,7 @@ Bicep is a Domain Specific Language (DSL) to create ARM Templates and deploy res
 Samples work with the current version of Bicep (no in Alpha)
 
 * App Gateway and two VM
+* Load Balancer and one VM with a NAT rule
 
 
 
