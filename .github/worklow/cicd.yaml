@@ -1,0 +1,15 @@
+name: docker-bicep-cicd
+
+on: [push]
+
+jobs:
+  test:
+    name: bicep-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: test-jobs
+        uses: ./bicepgithubactions
+        with:
+          directory: bicep

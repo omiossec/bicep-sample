@@ -1,0 +1,16 @@
+name: 'Azure-Bicep-Test'
+author: 'omiossec'
+description: 'perform a bicep build in each file located in the directory param'
+branding:
+  icon: 'cloud'
+  color: 'blue'
+inputs:
+  directory:
+    description: 'Directory to test'
+    default: "bicep"
+    required: false
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.directory }}
